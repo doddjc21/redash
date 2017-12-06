@@ -137,32 +137,40 @@ class Oracle(BaseSQLQueryRunner):
     def run_query(self, query, user):
         connection = cx_Oracle.connect(self.connection_string)
         connection.outputtypehandler = Oracle.output_handler
-
+ 
         cursor = connection.cursor()
-
+        error = None
         try:
             cursor.execute(query)
-
+            rows_count = cursor.rowcount
+ 
             if cursor.description is not None:
                 columns = self.fetch_columns([(i[0], Oracle.get_col_type(i[1], i[5])) for i in cursor.description])
                 rows = [dict(zip((c['name'] for c in columns), row)) for row in cursor]
-
                 data = {'columns': columns, 'rows': rows}
-                error = None
                 json_data = json.dumps(data, cls=JSONEncoder)
+ 
+ 
             else:
-                error = 'Query completed but it returned no data.'
-                json_data = None
+                columns = [{'name': 'Row(s) Affected',
+                        'type': 'TYPE_INTEGER'}]
+                rows = [{'Row(s) Affected': rows_count}]
+                data = {'columns': columns, 'rows': rows}
+                json_data = json.dumps(data, cls=JSONEncoder)
+                connection.commit()
+ 
         except cx_Oracle.DatabaseError as err:
             error = u"Query failed. {}.".format(err.message)
             json_data = None
+ 
         except KeyboardInterrupt:
             connection.cancel()
             error = "Query cancelled by user."
             json_data = None
+ 
         finally:
             connection.close()
-
+ 
         return json_data, error
-
+ 
 register(Oracle)
